@@ -14,6 +14,9 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 #include "display_hal.h"
 #include "network_api.h"
 #include "ui.h"
@@ -25,12 +28,63 @@
 // ─────────────────────────────────────────────────────────────────────────────
 static SolintegCurrentData s_current_data = {};
 static SolintegDailyData   s_daily_data   = {};
+static bool                s_current_dirty = false;
+static bool                s_daily_dirty   = false;
+static bool                s_fetch_error   = false;
 
-static unsigned long s_last_touch_ms         = 0;
-static unsigned long s_last_current_fetch_ms = 0;
-static unsigned long s_last_daily_fetch_ms   = 0;
+static SemaphoreHandle_t   s_data_mutex = nullptr;
+static unsigned long       s_last_touch_ms = 0;
 
 #define DAILY_POLL_INTERVAL_MS (5UL * 60UL * 1000UL)  // 5 minutes
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Networking Task
+// ─────────────────────────────────────────────────────────────────────────────
+void network_task(void *pvParameters) {
+    unsigned long last_current = 0;
+    unsigned long last_daily = 0;
+
+    while (true) {
+        unsigned long now = millis();
+        bool wifi_ok = network_wifi_is_connected();
+
+        if (wifi_ok) {
+            // Fetch Current Data
+            if (now - last_current >= API_POLL_INTERVAL_MS || last_current == 0) {
+                SolintegCurrentData tmp_current = {};
+                bool ok = solinteg_fetch_current(&tmp_current);
+                
+                if (xSemaphoreTake(s_data_mutex, portMAX_DELAY)) {
+                    if (ok) s_current_data = tmp_current;
+                    s_current_dirty = ok;
+                    s_fetch_error = !ok;
+                    xSemaphoreGive(s_data_mutex);
+                }
+                last_current = now;
+            }
+
+            // Fetch Daily Data
+            if (now - last_daily >= DAILY_POLL_INTERVAL_MS || last_daily == 0) {
+                SolintegDailyData tmp_daily = {};
+                bool ok = solinteg_fetch_daily(&tmp_daily);
+                
+                if (xSemaphoreTake(s_data_mutex, portMAX_DELAY)) {
+                    if (ok) s_daily_data = tmp_daily;
+                    s_daily_dirty = ok;
+                    xSemaphoreGive(s_data_mutex);
+                }
+                last_daily = now;
+            }
+        } else {
+             if (xSemaphoreTake(s_data_mutex, portMAX_DELAY)) {
+                s_fetch_error = true;
+                xSemaphoreGive(s_data_mutex);
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Splash helper (renders a message before the main UI is built)
@@ -108,48 +162,32 @@ void setup() {
     // Build main UI
     ui_init();
 
-    // Initial data fetch
-    if (wifi_ok && network_wifi_is_connected()) {
-        if (solinteg_fetch_current(&s_current_data)) {
-            ui_update_current(&s_current_data);
-        }
-        if (solinteg_fetch_daily(&s_daily_data)) {
-            ui_update_daily(&s_daily_data);
-        }
-    }
-    s_last_current_fetch_ms = millis();
-    s_last_daily_fetch_ms   = millis();
+    // Setup Mutex and Task
+    s_data_mutex = xSemaphoreCreateMutex();
+    xTaskCreatePinnedToCore(network_task, "network_task", 8192, NULL, 1, NULL, 0);
 
     Serial.println("[main] Setup complete. Entering loop.");
 }
 
 void loop() {
-    unsigned long now = millis();
-
     // Touch detection drives the sleep timer
     handle_touch_and_sleep();
 
     // Drive LVGL
     display_tick();
 
-    if (display_is_awake() && network_wifi_is_connected()) {
-        // Poll current data at API_POLL_INTERVAL_MS
-        if ((now - s_last_current_fetch_ms) >= API_POLL_INTERVAL_MS) {
-            s_last_current_fetch_ms = now;
-            bool ok = solinteg_fetch_current(&s_current_data);
+    // Check for new data from network task
+    if (xSemaphoreTake(s_data_mutex, 0) == pdTRUE) {
+        if (s_current_dirty) {
             ui_update_current(&s_current_data);
-            ui_show_error(!ok);
+            s_current_dirty = false;
         }
-
-        // Poll daily data every 5 minutes
-        if ((now - s_last_daily_fetch_ms) >= DAILY_POLL_INTERVAL_MS) {
-            s_last_daily_fetch_ms = now;
-            if (solinteg_fetch_daily(&s_daily_data)) {
-                ui_update_daily(&s_daily_data);
-            }
+        if (s_daily_dirty) {
+            ui_update_daily(&s_daily_data);
+            s_daily_dirty = false;
         }
-    } else if (!network_wifi_is_connected()) {
-        ui_show_error(true);
+        ui_show_error(s_fetch_error);
+        xSemaphoreGive(s_data_mutex);
     }
 
     delay(5); // 5ms tick aligns with lv_tick_inc(5)
