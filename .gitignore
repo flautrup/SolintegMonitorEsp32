@@ -1,0 +1,17 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# C/C++ build files
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+
+# Secrets & Credentials
+src/secrets.h
+include/secrets.h
+
+# OS generated files
+.DS_Store
+Thumbs.db
