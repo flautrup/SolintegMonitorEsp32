@@ -67,6 +67,7 @@ public:
 static LGFX tft;
 static CST816S touch(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT);
 static bool s_display_awake = true;
+static unsigned long s_last_touch_event_ms = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LVGL draw buffers + driver callbacks
@@ -94,6 +95,7 @@ static void lv_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
         data->point.x = touch.data.x;
         data->point.y = touch.data.y;
         data->state   = LV_INDEV_STATE_PRESSED;
+        s_last_touch_event_ms = millis();
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
     }
@@ -165,8 +167,8 @@ bool display_is_awake(void) {
     return s_display_awake;
 }
 
-bool display_touch_available(void) {
-    return touch.available();
+unsigned long display_get_last_touch_time(void) {
+    return s_last_touch_event_ms;
 }
 
 void display_tick(void) {

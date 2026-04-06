@@ -112,16 +112,18 @@ static void show_splash(const char *msg) {
 // Touch wake / sleep timer
 // ─────────────────────────────────────────────────────────────────────────────
 static void handle_touch_and_sleep(void) {
-    if (display_touch_available()) {
-        unsigned long now = millis();
-        s_last_touch_ms = now;
+    unsigned long now = millis();
+    unsigned long last_touch = display_get_last_touch_time();
+
+    if (last_touch > s_last_touch_ms) {
+        s_last_touch_ms = last_touch;
         if (!display_is_awake()) {
             display_wake();
         }
     }
 
     if (display_is_awake()) {
-        if ((millis() - s_last_touch_ms) > DISPLAY_SLEEP_TIMEOUT_MS) {
+        if ((now - s_last_touch_ms) > DISPLAY_SLEEP_TIMEOUT_MS) {
             display_sleep();
         }
     }

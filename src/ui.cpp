@@ -148,20 +148,28 @@ static void fmt_kw(char *buf, size_t len, float kw) {
 static lv_obj_t *s_screens[3];
 static int s_current_screen = 0;
 
-static void on_swipe(lv_event_t *e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+static void cycle_screen(bool next) {
+    if (next && s_current_screen < 2) {
+        s_current_screen++;
+        lv_scr_load_anim(s_screens[s_current_screen], LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
+    } else if (!next && s_current_screen > 0) {
+        s_current_screen--;
+        lv_scr_load_anim(s_screens[s_current_screen], LV_SCR_LOAD_ANIM_MOVE_RIGHT, 300, 0, false);
+    } else if (next && s_current_screen == 2) { // Loop back to start
+        s_current_screen = 0;
+        lv_scr_load_anim(s_screens[s_current_screen], LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
+    }
+}
 
+static void on_screen_event(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_GESTURE) {
-        if (dir == LV_DIR_LEFT && s_current_screen < 2) {
-            s_current_screen++;
-            lv_scr_load_anim(s_screens[s_current_screen],
-                             LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
-        } else if (dir == LV_DIR_RIGHT && s_current_screen > 0) {
-            s_current_screen--;
-            lv_scr_load_anim(s_screens[s_current_screen],
-                             LV_SCR_LOAD_ANIM_MOVE_RIGHT, 300, 0, false);
-        }
+        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+        if (dir == LV_DIR_LEFT) cycle_screen(true);
+        else if (dir == LV_DIR_RIGHT) cycle_screen(false);
+    } else if (code == LV_EVENT_CLICKED) {
+        // Fallback: tap center to cycle forward
+        cycle_screen(true);
     }
 }
 
@@ -231,7 +239,8 @@ static lv_obj_t * create_dot(lv_obj_t * parent) {
 static void build_screen_flow(void) {
     s_scr_flow = lv_obj_create(nullptr);
     apply_screen_style(s_scr_flow);
-    lv_obj_add_event_cb(s_scr_flow, on_swipe, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_flag(s_scr_flow, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_scr_flow, on_screen_event, LV_EVENT_ALL, nullptr);
 
     // ── Spoke Lines ──────────────────────────────────────────────────────────
     s_line_solar = create_line(s_scr_flow, CX, CY, NX_SOLAR, NY_SOLAR);
@@ -295,17 +304,26 @@ static void build_screen_flow(void) {
 static lv_obj_t *make_metric_row(lv_obj_t *parent, lv_coord_t y,
                                   const char *icon, lv_color_t icon_color,
                                   lv_obj_t **val_label_out) {
+    // Row container for alignment
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_set_size(row, 200, 32);
+    lv_obj_set_pos(row, 20, y);
+    lv_obj_set_style_bg_opa(row, 0, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
     // Icon
-    lv_obj_t *icon_lbl = lv_label_create(parent);
+    lv_obj_t *icon_lbl = lv_label_create(row);
     lv_label_set_text(icon_lbl, icon);
-    lv_obj_set_pos(icon_lbl, 28, y);
+    lv_obj_align(icon_lbl, LV_ALIGN_LEFT_MID, 10, 0);
     lv_obj_set_style_text_color(icon_lbl, icon_color, 0);
     lv_obj_set_style_text_font(icon_lbl, &lv_font_montserrat_24, 0);
 
     // Value
-    lv_obj_t *val = lv_label_create(parent);
-    lv_label_set_text(val, "--.-kW");
-    lv_obj_set_pos(val, 70, y);
+    lv_obj_t *val = lv_label_create(row);
+    lv_label_set_text(val, "0.00kW");
+    lv_obj_align(val, LV_ALIGN_LEFT_MID, 50, 0);
     lv_obj_add_style(val, &s_style_val_big, 0);
     *val_label_out = val;
     return val;
@@ -314,7 +332,8 @@ static lv_obj_t *make_metric_row(lv_obj_t *parent, lv_coord_t y,
 static void build_screen_current(void) {
     s_scr_current = lv_obj_create(nullptr);
     apply_screen_style(s_scr_current);
-    lv_obj_add_event_cb(s_scr_current, on_swipe, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_flag(s_scr_current, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_scr_current, on_screen_event, LV_EVENT_ALL, nullptr);
 
     // Title
     lv_obj_t *title = lv_label_create(s_scr_current);
@@ -325,10 +344,10 @@ static void build_screen_current(void) {
     lv_obj_set_style_text_color(title, COL_LABEL, 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
 
-    make_metric_row(s_scr_current, 46,  "☀", COL_SOLAR,   &s_lbl_solar_kw);
-    make_metric_row(s_scr_current, 78,  "⚡", COL_GRID,    &s_lbl_grid_kw);
-    make_metric_row(s_scr_current, 110, "▮", COL_BATTERY, &s_lbl_battery_kw);
-    make_metric_row(s_scr_current, 142, "⌂", COL_HOME,    &s_lbl_home_kw);
+    make_metric_row(s_scr_current, 44,  LV_SYMBOL_CHARGE, COL_SOLAR,   &s_lbl_solar_kw);
+    make_metric_row(s_scr_current, 76,  LV_SYMBOL_POWER,  COL_GRID,    &s_lbl_grid_kw);
+    make_metric_row(s_scr_current, 108, LV_SYMBOL_BATTERY_FULL, COL_BATTERY, &s_lbl_battery_kw);
+    make_metric_row(s_scr_current, 140, LV_SYMBOL_HOME,    COL_HOME,    &s_lbl_home_kw);
 
     // Battery SoC arc
     s_arc_soc = lv_arc_create(s_scr_current);
@@ -344,7 +363,7 @@ static void build_screen_current(void) {
     lv_obj_remove_style(s_arc_soc, nullptr, LV_PART_KNOB);
 
     s_lbl_soc = lv_label_create(s_scr_current);
-    lv_label_set_text(s_lbl_soc, "-%");
+    lv_label_set_text(s_lbl_soc, "0%");
     lv_obj_align_to(s_lbl_soc, s_arc_soc, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_text_color(s_lbl_soc, COL_BATTERY, 0);
     lv_obj_set_style_text_font(s_lbl_soc, &lv_font_montserrat_24, 0);
@@ -353,41 +372,44 @@ static void build_screen_current(void) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen 2 – Daily Summary
 // ─────────────────────────────────────────────────────────────────────────────
-static lv_obj_t *make_daily_row(lv_obj_t *parent, lv_coord_t y,
-                                 const char *label_text, lv_color_t col,
-                                 lv_obj_t **out) {
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, label_text);
-    lv_obj_set_pos(lbl, 12, y);
-    lv_obj_set_style_text_color(lbl, col, 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
-
-    lv_obj_t *val = lv_label_create(parent);
-    lv_label_set_text(val, "---");
-    lv_obj_set_pos(val, 12, y + 24);
-    lv_obj_set_style_text_color(val, COL_LABEL, 0);
-    lv_obj_set_style_text_font(val, &lv_font_montserrat_24, 0);
-    *out = val;
-    return val;
-}
-
 static void build_screen_daily(void) {
     s_scr_daily = lv_obj_create(nullptr);
     apply_screen_style(s_scr_daily);
-    lv_obj_add_event_cb(s_scr_daily, on_swipe, LV_EVENT_GESTURE, nullptr);
+    lv_obj_add_flag(s_scr_daily, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_scr_daily, on_screen_event, LV_EVENT_ALL, nullptr);
+
+    auto make_stat = [](lv_obj_t * parent, int y, const char * icon, const char * label, lv_color_t color, lv_obj_t ** out_val) {
+        lv_obj_t * icon_l = lv_label_create(parent);
+        lv_label_set_text(icon_l, icon);
+        lv_obj_set_style_text_color(icon_l, color, 0);
+        lv_obj_set_style_text_font(icon_l, &lv_font_montserrat_24, 0);
+        lv_obj_set_pos(icon_l, 30, y);
+
+        lv_obj_t * sub = lv_label_create(parent);
+        lv_label_set_text(sub, label);
+        lv_obj_set_style_text_color(sub, lv_color_hex(0xAAAAAA), 0);
+        lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
+        lv_obj_set_pos(sub, 65, y);
+
+        lv_obj_t * val = lv_label_create(parent);
+        lv_label_set_text(val, "0.0");
+        lv_obj_set_style_text_color(val, COL_LABEL, 0);
+        lv_obj_set_style_text_font(val, &lv_font_montserrat_24, 0);
+        lv_obj_set_pos(val, 65, y + 14);
+        *out_val = val;
+    };
 
     lv_obj_t *title = lv_label_create(s_scr_daily);
-    lv_label_set_text(title, "Today");
-    lv_obj_set_pos(title, 0, 14);
+    lv_label_set_text(title, "Daily Stats");
+    lv_obj_set_pos(title, 0, 10);
     lv_obj_set_width(title, 240);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(title, COL_LABEL, 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
 
-    make_daily_row(s_scr_daily, 50,  "☀ Solar Total",   COL_SOLAR,   &s_lbl_daily_pv_total);
-    make_daily_row(s_scr_daily, 104, "☀ Solar Peak",    COL_SOLAR,   &s_lbl_daily_pv_peak);
-    make_daily_row(s_scr_daily, 158, "⌂ Load Total",    COL_HOME,    &s_lbl_daily_load_total);
-    make_daily_row(s_scr_daily, 180, "⌂ Load Peak",     COL_HOME,    &s_lbl_daily_load_peak);
+    make_stat(s_scr_daily, 45,  LV_SYMBOL_CHARGE, "Solar Yield", COL_SOLAR,   &s_lbl_daily_pv_total);
+    make_stat(s_scr_daily, 85,  LV_SYMBOL_UP,     "Solar Peak",  COL_SOLAR,   &s_lbl_daily_pv_peak);
+    make_stat(s_scr_daily, 135, LV_SYMBOL_HOME,   "Home Total",  COL_HOME,    &s_lbl_daily_load_total);
+    make_stat(s_scr_daily, 175, LV_SYMBOL_UP,     "Home Peak",   COL_HOME,    &s_lbl_daily_load_peak);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

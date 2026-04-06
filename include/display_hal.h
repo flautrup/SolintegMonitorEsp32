@@ -13,7 +13,7 @@ bool display_init(void);
 void display_wake(void);
 void display_sleep(void);
 bool display_is_awake(void);
-bool display_touch_available(void);
+unsigned long display_get_last_touch_time(void);
 void display_tick(void);
 
 #ifdef __cplusplus
