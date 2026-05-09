@@ -5,7 +5,7 @@
 // ============================================
 
 // Solinteg Station
-#define SOLINTEG_STATION_ID     "68e39beb453729541efe79e2"
+// Note: SOLINTEG_STATION_ID is now defined in secrets.h
 #define SOLINTEG_API_BASE_URL   "https://lb-eu.solinteg-cloud.com"
 
 // Polling & Timeouts

@@ -99,7 +99,7 @@ bool solinteg_login(void) {
 
     char body[256];
     snprintf(body, sizeof(body),
-             "{\"account\":\"%s\",\"pwd\":\"%s\"}",
+             "{\"account\":\"%s\",\"pwd\":\"%s\",\"isReadAgreement\":true}",
              SOLINTEG_USERNAME, SOLINTEG_PASSWORD);
 
     int status = http.POST(body);

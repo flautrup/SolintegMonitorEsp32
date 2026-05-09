@@ -14,10 +14,10 @@ It can also have some type of animation showing how the energy is flowing in the
 6. The third show the max production during the day and max consumption during the day.
 
 ## Implemented Features
-- The days data can be found here https://lb-eu.solinteg-cloud.com/gen2api/pc/owner/station/statistics/station/new?date=2026-03-13&dateType=DAY&stationId=68e39beb453729541efe79e2
-- Current  information https://lb-eu.solinteg-cloud.com/gen2api/pc/owner/station/stationCurrentInfo/68e39beb453729541efe79e2/system
-- Code on this page return the information we need https://www.solinteg-cloud.com/power-station/detail?id=68e39beb453729541efe79e2&name=P3240%20Timotejv%C3%A4gen%2025%20L%C3%B6ddek%C3%B6pinge
-- Anläggningsnamn is P3240 Timotejvägen 25 Löddeköpinge
+- The days data can be found here https://lb-eu.solinteg-cloud.com/gen2api/pc/owner/station/statistics/station/new?date=2026-03-13&dateType=DAY&stationId=[STATION_ID]
+- Current  information https://lb-eu.solinteg-cloud.com/gen2api/pc/owner/station/stationCurrentInfo/[STATION_ID]/system
+- Code on this page return the information we need https://www.solinteg-cloud.com/power-station/detail?id=[STATION_ID]&name=[STATION_NAME]
+- Anläggningsnamn is [STATION_NAME]
 
 # Authentication
   curl 'https://lb-eu.solinteg-cloud.com/gen2api/pc/user/login' \
